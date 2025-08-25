@@ -2,7 +2,7 @@
 
 <hr />
 
-![main figure](media/intro_fig.png)
+![main figure](res.png)
 > **Abstract:** *Anomaly detection plays a critical role in medical imaging applications such as COVID-19 and pneumonia screening. However, most existing techniques depend on labeled anomalous samples, which are often scarce or impractical to obtain. We propose an unsupervised anomaly detection framework that integrates active learning with generative models to improve detection without requiring anomalous training data. Experimental results on the COVID CXR dataset show that active learning substantially enhances performance, raising ROC-AUC from 0.9489 (baseline) to 0.9982 and F1 from 0.8048 to 0.9746, while reducing false positives from 34 to 5. Similarly, on the chest_xray pneumonia dataset, our method improves ROC-AUC from 0.6834 to 0.8820 and F1 from 0.7008 to 0.7849, with notable gains in precision (0.7620 to 0.9060). These results demonstrate that active learning can substantially refine anomaly detection accuracy in medical imaging tasks, even when anomalous samples are unavailable during training.* 
 <hr />
 

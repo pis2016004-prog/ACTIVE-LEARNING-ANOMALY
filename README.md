@@ -18,7 +18,10 @@ The proposed active learning substantially improves performance across multiple 
 The dataset is available at {https://www.kaggle.com/datasets/paultimothymooney/chest-xray-pneumonia/}.
 ### COVID CXR Dataset
  Our active learning method yields significant gains over the baseline. ROC AUC improves from 0.9489 to 0.9982, and PR AUC rises from 0.8976 to 0.9951. At the Youden-optimal threshold, accuracy increases from 0.8868 to 0.9861. Precision improves from 0.7481 to 0.9583, recall from 0.8707 to 0.9914, and F1 score from 0.8048 to 0.9746. In terms of confusion matrix entries, true negatives increase (283 to 312), false positives decrease (34 to 5), false negatives are reduced (15 to 1), and true positives rise (101 to 115).
+<hr/>
 
+![main figure](confusion.png)
+<hr/>
 
 
 ## Acknowledgement

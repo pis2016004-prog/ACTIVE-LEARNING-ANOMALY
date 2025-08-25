@@ -24,34 +24,21 @@ Best results are in bold.
 
 ## Qualitative Comparison
 
-### Synapse Dataset
-Qualitative comparison on multi-organ segmentation task. Here, we compare our UNETR++ with existing methods: UNETR, Swin UNETR, and nnFormer. 
-The different abdominal organs are shown in the legend below the examples. Existing methods struggle to correctly segment different organs (marked in red dashed box). 
-Our UNETR++ achieves promising segmentation performance by accurately segmenting the organs.
-![Synapse Qual Results](media/UNETR++_results_fig_synapse.jpg)
 
-### ACDC Dataset
-Qualitative comparison on the ACDC dataset. We compare our UNETR++ with existing methods: UNETR and nnFormer. It is noticeable that the existing methods struggle to correctly segment different organs (marked in red dashed box). Our UNETR++ achieves favorable segmentation performance by accurately segmenting the organs.  Our UNETR++ achieves promising segmentation performance by accurately segmenting the organs.
-![ACDC Qual Results](media/acdc_vs_unetr_suppl.jpg)
+
+### chest-xray-pneumonia
+We compare a baseline PatchCore system (memory from the full training set, no active learning) against our proposed active learning strategy, which begins with 30\% seed normal samples followed by 5 active learning (AL) rounds with SWAG gating. Evaluation is performed on a held-out test set with mixed labels. 
+
+The proposed active learning substantially improves performance across multiple metrics. ROC-AUC increases from 0.6834 (baseline) to 0.8820, while PR-AUC improves from 0.7656 to 0.9267. Accuracy also rises from 0.6538 to 0.7628. Precision improves from 0.7620 to 0.9060, with recall increasing from 0.6487 to 0.6923, resulting in an F1 gain from 0.7008 to 0.7849. In addition to these improvements, false positives are reduced from 79 to 28, while true positives increase from 253 to 270.  
+The dataset is available at \url{https://www.kaggle.com/datasets/paultimothymooney/chest-xray-pneumonia/}.
+### COVID CXR Dataset
+ Our active learning method yields significant gains over the baseline. ROC AUC improves from 0.9489 to 0.9982, and PR AUC rises from 0.8976 to 0.9951. At the Youden-optimal threshold, accuracy increases from 0.8868 to 0.9861. Precision improves from 0.7481 to 0.9583, recall from 0.8707 to 0.9914, and F1 score from 0.8048 to 0.9746. In terms of confusion matrix entries, true negatives increase (283 $\rightarrow$ 312), false positives decrease (34 $\rightarrow$ 5), false negatives are reduced (15 $\rightarrow$ 1), and true positives rise (101 $\rightarrow$ 115).
 
 
 <hr />
 
 ## Installation
-The code is tested with PyTorch 1.11.0 and CUDA 11.3. After cloning the repository, follow the below steps for installation,
-
-1. Create and activate conda environment
-```shell
-conda create --name unetr_pp python=3.8
-conda activate unetr_pp
-```
-2. Install PyTorch and torchvision
-```shell
-pip install torch==1.11.0+cu113 torchvision==0.12.0+cu113 --extra-index-url https://download.pytorch.org/whl/cu113
-```
-3. Install other dependencies
-```shell
-pip install -r requirements.txt
+The code is tested with PyTorch 1.11.0 and CUDA 11.3. 
 ```
 <hr />
 
@@ -67,5 +54,4 @@ We thanks to PatchCore implementaions.
 
 ```
 
-## Contact
-Should you have any question, please create an issue on this repository or contact me at abdelrahman.youssief@mbzuai.ac.ae.
+

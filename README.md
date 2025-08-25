@@ -11,7 +11,7 @@
 
 
 ## Results
-### chest-xray-pneumonia
+### Chest-Xray-Pneumonia
 We compare a baseline PatchCore system (memory from the full training set, no active learning) against our proposed active learning strategy, which begins with 30\% seed normal samples followed by 5 active learning (AL) rounds with SWAG gating. Evaluation is performed on a held-out test set with mixed labels. 
 
 The proposed active learning substantially improves performance across multiple metrics. ROC-AUC increases from 0.6834 (baseline) to 0.8820, while PR-AUC improves from 0.7656 to 0.9267. Accuracy also rises from 0.6538 to 0.7628. Precision improves from 0.7620 to 0.9060, with recall increasing from 0.6487 to 0.6923, resulting in an F1 gain from 0.7008 to 0.7849. In addition to these improvements, false positives are reduced from 79 to 28, while true positives increase from 253 to 270.  

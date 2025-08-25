@@ -11,21 +11,6 @@
 
 
 ## Results
-
-### Synapse Dataset
-State-of-the-art comparison on the abdominal multi-organ Synapse dataset. We report both the segmentation performance (DSC, HD95) and model complexity (parameters and FLOPs).
-Our proposed UNETR++ achieves favorable segmentation performance against existing methods, while being considerably reducing the model complexity. Best results are in bold. 
-Abbreviations stand for: Spl: _spleen_, RKid: _right kidney_, LKid: _left kidney_, Gal: _gallbladder_, Liv: _liver_, Sto: _stomach_, Aor: _aorta_, Pan: _pancreas_. 
-Best results are in bold.
-
-![Synapse Results](media/synapse_results.png)
-
-<hr />
-
-## Qualitative Comparison
-
-
-
 ### chest-xray-pneumonia
 We compare a baseline PatchCore system (memory from the full training set, no active learning) against our proposed active learning strategy, which begins with 30\% seed normal samples followed by 5 active learning (AL) rounds with SWAG gating. Evaluation is performed on a held-out test set with mixed labels. 
 
@@ -34,18 +19,6 @@ The dataset is available at \url{https://www.kaggle.com/datasets/paultimothymoon
 ### COVID CXR Dataset
  Our active learning method yields significant gains over the baseline. ROC AUC improves from 0.9489 to 0.9982, and PR AUC rises from 0.8976 to 0.9951. At the Youden-optimal threshold, accuracy increases from 0.8868 to 0.9861. Precision improves from 0.7481 to 0.9583, recall from 0.8707 to 0.9914, and F1 score from 0.8048 to 0.9746. In terms of confusion matrix entries, true negatives increase (283 $\rightarrow$ 312), false positives decrease (34 $\rightarrow$ 5), false negatives are reduced (15 $\rightarrow$ 1), and true positives rise (101 $\rightarrow$ 115).
 
-
-<hr />
-
-## Installation
-The code is tested with PyTorch 1.11.0 and CUDA 11.3. 
-```
-<hr />
-
-
-
-
-<hr />
 
 
 ## Acknowledgement

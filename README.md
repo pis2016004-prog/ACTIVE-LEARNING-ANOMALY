@@ -1,4 +1,4 @@
-# I Detect What I Don’t Know: Active Learning with SWAG for Unknown Anomaly Detection
+# I Detect What I Don’t Know: Incremental Learning with SWAG for Unknown Anomaly Detection
 
 <hr />
 

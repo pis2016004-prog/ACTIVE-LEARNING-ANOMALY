@@ -520,7 +520,7 @@ def _scores_to_numpy(ret):
 
 def active_learning_patchcore_swag_fixed(
     backbone, adapter, dataset, seed_indices_normals, pool_indices, device,
-    rounds=5, budget=50, mem_coreset=0.3, swag_noise=0.02, swag_K=4,
+    rounds=5, budget=100 ,mem_coreset=0.3, swag_noise=0.02, swag_K=4,
     top_q=0.03, k=3, p_gate=0.95, save_dir="runs/patchcore_al_best",
     use_val_guard=False, val_loader=None, val_labels=None, guard_tol=0.01,
     strict_normal_only=True, resume_each_round_from="best_so_far",
@@ -656,7 +656,7 @@ def active_learning_patchcore_swag_fixed(
 
         # Fine-tune briefly on accepted normals
         round_loader = build_loader_from_indices(dataset, selected_globals, batch=32, shuffle=True)
-        train_adapter_compact(backbone, adapter, round_loader, device, epochs=1, lr=3e-5, proto_k=128)
+        train_adapter_compact(backbone, adapter, round_loader, device, epochs=5, lr=3e-5, proto_k=128)
         swag.collect(copy.deepcopy(adapter).eval())
 
         # Grow accepted set & rebuild memory (seed ∪ accepted_normals)
@@ -695,6 +695,126 @@ def active_learning_patchcore_swag_fixed(
     print(f"[CKPT] restored best_overall = {best_score:.6f} for final eval.")
     return adapter, mem_normal
 
+def active_learning_oracle_free(
+    backbone, adapter, dataset, seed_indices_normals, pool_indices, device,
+    rounds=5, budget=50, mem_coreset=0.3, swag_noise=0.02, swag_K=8,
+    top_q=0.03, k=3, save_dir="runs/patchcore_oraclefree",
+    tau_z_initial=1.0, tau_z_relaxed=1.5,
+    rank_mode="safe",              # "safe" (low z_s & z_u first) or "boundary" (high s first)
+    ws=0.7, wu=0.3,                # weights for z_s and z_u (only used in "safe" mode)
+    use_staging=True, staging_patience=2  # must pass the gate for 2 rounds before promotion
+):
+    """
+    Oracle-free AL:
+      - No label checks on the pool.
+      - Dual z-score gates: accept only low distance & low SWAG uncertainty.
+      - Optional 'staging' — item must be safe in >=2 rounds before being added to memory & used for fine-tuning.
+    """
+    os.makedirs(save_dir, exist_ok=True)
+    ckpt_dir = os.path.join(save_dir, "ckpts"); os.makedirs(ckpt_dir, exist_ok=True)
+
+    # --- seed loaders & warm-up ---
+    seed_loader      = build_loader_from_indices(dataset, seed_indices_normals, batch=32, shuffle=True)
+    seed_loader_eval = build_loader_from_indices(dataset, seed_indices_normals, batch=64, shuffle=False)
+    train_adapter_compact(backbone, adapter, seed_loader, device, epochs=3, lr=1e-4, proto_k=128)
+
+    # --- SWAG ---
+    swag = SWAGAdapter(adapter, noise_scale=swag_noise, max_snaps=30, device=device)
+    swag.collect(copy.deepcopy(adapter).eval()); swag.collect(copy.deepcopy(adapter).eval())
+
+    # --- initial memory from seeds ---
+    V_seed = extract_patch_vectors(backbone, adapter, seed_loader_eval, device, target_hw=(16,16), per_image_cap=256)
+    mem_normal = MemoryBank(coreset_ratio=mem_coreset, method="auto", device=device)
+    mem_normal.build(V_seed)
+
+    # --- calibrate gates on seed normals ---
+    s_seed_np = score_images_patchcore(backbone, adapter, mem_normal, seed_loader_eval, device, top_q=top_q, k=k)[0].cpu().numpy()
+    u_seed_np = swag_uncertainty(backbone, swag, mem_normal, seed_loader_eval, device, K=swag_K, top_q=top_q, k=k).cpu().numpy()
+    mu_s, sd_s = float(np.mean(s_seed_np)), float(np.std(s_seed_np) + 1e-8)
+    mu_u, sd_u = float(np.mean(u_seed_np)), float(np.std(u_seed_np) + 1e-8)
+    use_u = (sd_u > 1e-6)
+    print(f"[Calib] mu_s={mu_s:.6f} sd_s={sd_s:.6f} | mu_u={mu_u:.6f} sd_u={sd_u:.6f} | use_u={use_u}")
+
+    # --- state ---
+    used_local = set()
+    accepted = []               # promoted (unlabeled) items → memory
+    staged   = {}               # global_idx -> consecutive safe passes
+    tau_z = tau_z_initial
+
+    for r in range(1, rounds+1):
+        print(f"\n=== Round {r} (tau_z={tau_z}) ===")
+
+        # rebuild memory from seeds ∪ accepted
+        mem_ids = seed_indices_normals + accepted
+        mem_loader_eval = build_loader_from_indices(dataset, mem_ids, batch=64, shuffle=False)
+        V_mem = extract_patch_vectors(backbone, adapter, mem_loader_eval, device, target_hw=(16,16), per_image_cap=256)
+        mem_normal.build(V_mem)
+
+        # remaining pool
+        rem_local  = [i for i in range(len(pool_indices)) if i not in used_local]
+        if not rem_local:
+            print("Pool exhausted."); break
+        rem_global = [pool_indices[i] for i in rem_local]
+        rem_loader = build_loader_from_indices(dataset, rem_global, batch=64, shuffle=False)
+
+        # scores & (optional) uncertainty
+        s_pool = score_images_patchcore(backbone, adapter, mem_normal, rem_loader, device, top_q=top_q, k=k)[0].cpu().numpy()
+        if use_u:
+            u_pool = swag_uncertainty(backbone, swag, mem_normal, rem_loader, device, K=swag_K, top_q=top_q, k=k).cpu().numpy()
+        else:
+            u_pool = np.zeros_like(s_pool)
+
+        z_s = (s_pool - mu_s) / (sd_s if sd_s > 0 else 1.0)
+        z_u = (u_pool - mu_u) / (sd_u if sd_u > 0 else 1.0)
+
+        # dual safe gate (relax once if empty)
+        safe_idx = np.nonzero((z_s <= tau_z) & ((z_u <= tau_z) if use_u else True))[0]
+        if safe_idx.size == 0 and tau_z < tau_z_relaxed:
+            print("[Round] relaxing gate once.")
+            tau_z = tau_z_relaxed
+            safe_idx = np.nonzero((z_s <= tau_z) & ((z_u <= tau_z) if use_u else True))[0]
+
+        if safe_idx.size == 0:
+            print("[Round] still none; skipping.")
+            continue
+
+        # ranking inside safe set
+        if rank_mode == "safe":
+            rank_score = ws * z_s[safe_idx] + (wu * z_u[safe_idx] if use_u else 0.0)  # lower is safer
+            order = np.argsort(rank_score)
+        else:  # "boundary"
+            order = np.argsort(-s_pool[safe_idx])  # high score first
+        take_idx = safe_idx[order][:min(budget, safe_idx.size)]
+
+        # mark used (we won't revisit them)
+        for i_pool in take_idx:
+            used_local.add(rem_local[int(i_pool)])
+        selected_globals = [rem_global[i] for i in take_idx]
+
+        # staging (no labels): require consistency across rounds before promotion
+        to_finetune = []
+        if use_staging:
+            for g in selected_globals:
+                staged[g] = staged.get(g, 0) + 1
+                if staged[g] >= staging_patience:
+                    to_finetune.append(g)
+                    accepted.append(g)
+                    del staged[g]
+        else:
+            to_finetune = selected_globals
+            accepted.extend(selected_globals)
+
+        # short fine-tune on presumed normals (oracle-free)
+        if len(to_finetune) > 0:
+            round_loader = build_loader_from_indices(dataset, to_finetune, batch=32, shuffle=True)
+            train_adapter_compact(backbone, adapter, round_loader, device, epochs=1, lr=3e-5, proto_k=128)
+            swag.collect(copy.deepcopy(adapter).eval())
+
+        # save a round checkpoint
+        torch.save({"state_dict": adapter.state_dict()}, os.path.join(ckpt_dir, f"round{r}_last.pth"))
+
+    print("[AL] oracle-free finished.")
+    return adapter, mem_normal
 
 # --------------------------- MAIN ---------------------------
 if __name__ == "__main__":
@@ -793,12 +913,31 @@ if __name__ == "__main__":
         top_q=0.03,               # ↓ a bit to encourage recall
         k=3,
         save_dir="runs/patchcore_al_best",
-        strict_normal_only=True,
+        strict_normal_only=False,
         resume_each_round_from="best_so_far",
         rank_mode="boundary",
         metric_pool_indices=metric_pool_indices,
         pool_sample_for_metric=512
     )
+    
+    # ----- ACTIVE LEARNING (oracle-free) -----
+    # adapter_al = PCAdapter(in_chs=in_chs, out_dim=256).to(device)
+
+    # adapter_trained, memory_normal = active_learning_oracle_free(
+    #     backbone, adapter_al, dataset,
+    #     seed_indices_normals=idx_seed,
+    #     pool_indices=pool_indices,      # pool can be unlabeled
+    #     device=device,
+    #     rounds=5,
+    #     budget=50,
+    #     mem_coreset=0.3,
+    #     swag_noise=0.02, swag_K=8,      # stronger SWAG to avoid variance collapse
+    #     top_q=0.03, k=3,
+    #     save_dir="runs/patchcore_oraclefree",
+    #     rank_mode="safe", ws=0.7, wu=0.3,
+    #     use_staging=True, staging_patience=2
+    # )
+
 
     # -------- Post-AL evaluation (with grown memory) --------
     print("\n=== Post-AL evaluation (after AL) ===")
